@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  STUDENT
+  VISITOR
+}
+
+enum PostType {
+  PROJECT
+  BLOG
+  TUTORIAL
+  RESEARCH
+  ACHIEVEMENT
+  HACKATHON
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  FEATURE
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(STUDENT)
+  isVerified    Boolean   @default(false)
+  refreshToken  String?
+  isSuspended   Boolean   @default(false)
+  suspendedAt   DateTime?
+  suspendedReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       Profile?
+  posts         Post[]
+  comments      Comment[]
+  likes         Like[]
+  bookmarks     Bookmark[]
+  followers     Follow[]       @relation("Following")
+  following     Follow[]       @relation("Followers")
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model Profile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName    String
+  lastName     String
+  nickname     String?  @unique
+  bio          String?  @db.Text
+  collegeName  String?
+  department   String?
+  year         Int?
+  skills       String[]
+  linkedinUrl  String?
+  githubUrl    String?
+  portfolioUrl String?
+  resumeUrl    String?
+  avatarUrl    String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([collegeName])
+  @@index([department])
+}
+
+model Post {
+  id           String    @id @default(uuid())
+  authorId     String
+  author       User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  title        String
+  slug         String    @unique
+  content      String    @db.Text
+  type         PostType
+  thumbnailUrl String?
+  techStack    String[]
+  githubUrl    String?
+  liveDemoUrl  String?
+  youtubeUrl   String?
+  documentUrl  String?
+
+  viewCount    Int       @default(0)
+  isPublished  Boolean   @default(true)
+  isFeatured   Boolean   @default(false)
+  isRemoved    Boolean   @default(false)
+  removedAt    DateTime?
+  removedReason String?
+  deletedAt    DateTime?
+
+  category     Category  @relation(fields: [categoryId], references: [id])
+  categoryId   String
+
+  comments     Comment[]
+  likes        Like[]
+  bookmarks    Bookmark[]
+  flaggedContent FlaggedContent[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([deletedAt])
+  @@index([authorId, isPublished, deletedAt])
+  @@index([createdAt(sort: Desc)])
+  @@index([type])
+  @@index([categoryId])
+  @@index([isPublished, deletedAt, createdAt(sort: Desc)])
+}
+
+model Category {
+  id    String @id @default(uuid())
+  name  String @unique
+  slug  String @unique
+  posts Post[]
+}
+
+model Comment {
+  id        String    @id @default(uuid())
+  content   String    @db.Text
+  postId    String
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  guestName String?
+
+  parentId  String?
+  parent    Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("Replies")
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([postId, deletedAt])
+  @@index([authorId, createdAt(sort: Desc)])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Follow {
+  followerId  String
+  follower    User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actorId   String?
+  type      NotificationType
+  entityId  String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+model FlaggedContent {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reason    String
+  status    String   @default("pending")
+  reportedBy String?
+  reportedAt DateTime @default(now())
+  reviewedBy String?
+  reviewedAt DateTime?
+  notes      String?  @db.Text
+
+  @@index([status])
+  @@index([postId])
+  @@index([reportedAt(sort: Desc)])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action    String
+  entityType String?
+  entityId  String?
+  changes   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+}
